@@ -1,0 +1,20 @@
+# Local environment
+.env
+
+# Build outputs
+target/
+*.class
+*.jar
+
+# Logs
+*.log
+
+# IDE/editor files
+.idea/
+.vscode/
+*.iml
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
