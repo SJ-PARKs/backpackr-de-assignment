@@ -1,0 +1,156 @@
+version: "3.8"
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  # Hive Metastore 백엔드 + batch_processing_log 테이블 공유
+  postgres:
+    image: postgres:12
+    container_name: postgres
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/03_create_batch_log.sql:/docker-entrypoint-initdb.d/03_create_batch_log.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hadoop
+
+  # ── HDFS Namenode ─────────────────────────────────────────────────────────
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      - CLUSTER_NAME=ecommerce
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+      # CSV 원본 파일을 읽기 전용으로 마운트 (hdfs dfs -put 용)
+      - /mnt/c/Users/sjisn/OneDrive/Desktop/새 폴더/backpacker:/mnt/csv:ro
+    ports:
+      - "9870:9870"   # HDFS Web UI
+      - "9000:9000"   # HDFS IPC
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870/"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - hadoop
+
+  # ── HDFS Datanode ─────────────────────────────────────────────────────────
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    depends_on:
+      namenode:
+        condition: service_healthy
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+    networks:
+      - hadoop
+
+  # ── Hive Metastore ────────────────────────────────────────────────────────
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 postgres:5432"
+    volumes:
+      - ./docker/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+    command: /opt/hive/bin/hive --service metastore
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9083"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - hadoop
+
+  # ── HiveServer2 ───────────────────────────────────────────────────────────
+  hiveserver2:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hiveserver2
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    volumes:
+      - ./docker/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./sql:/sql:ro
+    ports:
+      - "10000:10000"   # Hive JDBC (beeline)
+      - "10002:10002"   # HiveServer2 Web UI
+    command: /opt/hive/bin/hive --service hiveserver2
+    networks:
+      - hadoop
+
+  # ── Spark Master ──────────────────────────────────────────────────────────
+  spark-master:
+    image: bde2020/spark-master:3.1.1-hadoop3.2
+    container_name: spark-master
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - SPARK_CONF_DIR=/spark/conf
+    volumes:
+      - ./docker/hive-site.xml:/spark/conf/hive-site.xml:ro
+      - .:/app
+    ports:
+      - "8080:8080"   # Spark Web UI
+      - "7077:7077"   # Spark master
+    networks:
+      - hadoop
+
+  # ── Spark Worker ──────────────────────────────────────────────────────────
+  spark-worker:
+    image: bde2020/spark-worker:3.1.1-hadoop3.2
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    env_file:
+      - ./docker/hadoop.env
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=8g
+      - SPARK_WORKER_CORES=4
+    volumes:
+      - ./docker/hive-site.xml:/spark/conf/hive-site.xml:ro
+      - .:/app
+    networks:
+      - hadoop
+
+volumes:
+  postgres_data:
+  namenode_data:
+  datanode_data:
+
+networks:
+  hadoop:
+    driver: bridge
