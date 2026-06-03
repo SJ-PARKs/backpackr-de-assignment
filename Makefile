@@ -50,10 +50,10 @@ docker-down:
 	docker-compose down
 
 docker-build:
-	docker exec spark-master sh -c "cd /app && mvn clean package -DskipTests"
+	docker run --rm -v "$$PWD":/app -w /app maven:3.8-openjdk-8 mvn clean package -DskipTests
 
 docker-submit:
-	docker exec spark-master spark-submit \
+	docker exec spark-master /spark/bin/spark-submit \
 	  --master spark://spark-master:7077 \
 	  --class com.ecommerce.spark.EcommerceProcessor \
 	  $(DOCKER_JAR) \
