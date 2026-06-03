@@ -39,6 +39,14 @@ s3://ecommerce-spark-pipeline-ap-northeast-2/
     └── ecommerce-spark-1.0.jar
 ```
 
+`data/` 폴더에 CSV 파일을 넣은 뒤 아래 명령으로 버킷 생성과 업로드를 한 번에 처리할 수 있습니다.
+
+```bash
+make docker-up    # Maven 빌드 환경(Docker) 시작
+make docker-build # JAR 빌드
+make s3-setup     # 버킷 생성, CSV 업로드, JAR 업로드
+```
+
 2. `.env` 파일에 환경 변수를 설정한 뒤 EMR Step을 제출합니다.
 
 ```bash

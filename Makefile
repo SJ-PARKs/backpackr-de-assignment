@@ -13,6 +13,16 @@ build:
 upload-jar:
 	aws s3 cp target/ecommerce-spark-1.0.jar s3://$(S3_BUCKET)/jars/ --region $(REGION)
 
+# ── S3 초기 설정 ──────────────────────────────────────────────────────
+create-bucket:
+	aws s3 mb s3://$(S3_BUCKET) --region $(REGION)
+
+upload-data:
+	aws s3 sync data/ s3://$(S3_BUCKET)/input/ecommerce/ \
+	  --region $(REGION) --exclude "*" --include "*.csv"
+
+s3-setup: create-bucket upload-data upload-jar
+
 # ── EMR ───────────────────────────────────────────────────────────────
 STEP_ARGS = --master,yarn,--deploy-mode,cluster,--class,com.ecommerce.spark.EcommerceProcessor,$(JAR),--input-dir,$(INPUT),--output-dir,$(OUTPUT),--checkpoint-dir,$(TMP),--pg-url,$(PG_URL),--pg-user,$(PG_USER),--pg-password,$(PG_PASSWORD)
 
@@ -90,6 +100,7 @@ athena-wau:
 	  --query 'ResultSet.Rows[*].Data[*].VarCharValue' \
 	  --output table
 
-.PHONY: build upload-jar submit status cluster-status check-output \
+.PHONY: build create-bucket upload-data upload-jar s3-setup \
+        submit status cluster-status check-output \
         docker-up docker-down docker-build docker-submit docker-status \
         wau athena-wau
