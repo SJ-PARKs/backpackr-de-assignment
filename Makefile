@@ -23,6 +23,51 @@ upload-data:
 
 s3-setup: create-bucket upload-data upload-jar
 
+# ── RDS 생성 ──────────────────────────────────────────────────────────
+create-rds:
+	aws rds create-db-instance \
+	  --db-instance-identifier ecommerce-spark-metastore \
+	  --db-instance-class $(RDS_INSTANCE_CLASS) \
+	  --engine postgres \
+	  --engine-version 17.9 \
+	  --master-username $(PG_USER) \
+	  --master-user-password $(PG_PASSWORD) \
+	  --db-name metastore \
+	  --db-subnet-group-name $(RDS_SUBNET_GROUP) \
+	  --vpc-security-group-ids $(RDS_SG) \
+	  --no-multi-az \
+	  --allocated-storage 20 \
+	  --no-publicly-accessible \
+	  --region $(REGION) \
+	  --query 'DBInstance.[DBInstanceIdentifier,DBInstanceStatus]' --output table
+	@echo "RDS 생성 요청 완료 — available 상태가 될 때까지 수 분 소요됩니다."
+	@echo "준비되면: make rds-endpoint"
+
+rds-endpoint:
+	$(eval ENDPOINT := $(shell aws rds describe-db-instances \
+	  --db-instance-identifier ecommerce-spark-metastore \
+	  --region $(REGION) \
+	  --query 'DBInstances[0].Endpoint.Address' --output text))
+	@echo "RDS Endpoint: $(ENDPOINT)"
+	@sed -i "s/^RDS_ENDPOINT=.*/RDS_ENDPOINT=$(ENDPOINT)/" .env
+
+# ── EMR 클러스터 생성 ─────────────────────────────────────────────────
+create-cluster:
+	$(eval CID := $(shell aws emr create-cluster \
+	  --name "ecommerce-spark-pipeline" \
+	  --release-label emr-6.3.0 \
+	  --applications Name=Spark Name=Hive \
+	  --instance-type $(INSTANCE_TYPE) \
+	  --instance-count $(INSTANCE_COUNT) \
+	  --ec2-attributes SubnetId=$(EC2_SUBNET) \
+	  --use-default-roles \
+	  --region $(REGION) \
+	  --log-uri s3://$(S3_BUCKET)/emr-logs/ \
+	  --configurations file://emr-config.json \
+	  --query 'ClusterId' --output text))
+	@echo "Cluster ID: $(CID)"
+	@sed -i "s/^CLUSTER_ID=.*/CLUSTER_ID=$(CID)/" .env
+
 # ── EMR ───────────────────────────────────────────────────────────────
 STEP_ARGS = --master,yarn,--deploy-mode,cluster,--class,com.ecommerce.spark.EcommerceProcessor,$(JAR),--input-dir,$(INPUT),--output-dir,$(OUTPUT),--checkpoint-dir,$(TMP),--pg-url,$(PG_URL),--pg-user,$(PG_USER),--pg-password,$(PG_PASSWORD)
 
@@ -101,6 +146,7 @@ athena-wau:
 	  --output table
 
 .PHONY: build create-bucket upload-data upload-jar s3-setup \
+        create-rds rds-endpoint create-cluster \
         submit status cluster-status check-output \
         docker-up docker-down docker-build docker-submit docker-status \
         wau athena-wau

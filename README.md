@@ -47,12 +47,16 @@ make docker-build # JAR 빌드
 make s3-setup     # 버킷 생성, CSV 업로드, JAR 업로드
 ```
 
-2. `.env` 파일에 환경 변수를 설정한 뒤 EMR Step을 제출합니다.
+2. `.env` 파일에 환경 변수를 설정한 뒤 RDS와 EMR 클러스터를 생성하고 Step을 제출합니다.
 
 ```bash
-make submit       # EMR Step 제출
-make status       # Step 진행 상태 확인
-make check-output # S3 output 파일 확인
+make create-rds      # RDS PostgreSQL 생성 
+make rds-endpoint    # 엔드포인트 확인 및 .env 자동 업데이트
+make create-cluster  # EMR 클러스터 생성 및 CLUSTER_ID 자동 업데이트 
+make cluster-status  # WAITING 상태 확인 후
+make submit          # EMR Step 제출
+make status          # Step 진행 상태 확인
+make check-output    # S3 output 파일 확인
 ```
 
 EMR은 Glue Data Catalog를 Hive Metastore로 사용하고, 처리 결과는 S3에 Parquet 형식으로 저장됩니다.
