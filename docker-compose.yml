@@ -34,7 +34,7 @@ services:
     volumes:
       - namenode_data:/hadoop/dfs/name
       # CSV 원본 파일을 읽기 전용으로 마운트 (hdfs dfs -put 용)
-      - /mnt/c/Users/sjisn/OneDrive/Desktop/새 폴더/backpacker:/mnt/csv:ro
+      - ./data:/mnt/csv:ro
     ports:
       - "9870:9870"   # HDFS Web UI
       - "9000:9000"   # HDFS IPC

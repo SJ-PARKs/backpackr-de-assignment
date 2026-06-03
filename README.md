@@ -57,10 +57,10 @@ make athena-wau
 
 ### 로컬 환경
 
-1. CSV 파일을 준비합니다. `docker-compose.yml`의 namenode 마운트 경로에 위치해야 합니다.
+1. CSV 파일을 프로젝트 루트의 `data/` 폴더에 넣습니다.
 
 ```text
-/mnt/csv/
+data/
 ├── 2019-Oct.csv
 └── 2019-Nov.csv
 ```
